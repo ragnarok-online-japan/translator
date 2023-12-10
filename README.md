@@ -1,2 +1,2 @@
-# json-translator
-translator: Ragnarok Online用に生成された各種JSONデータを翻訳
+# translator
+translator: Ragnarok Online用に生成された各種データを翻訳
