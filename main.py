@@ -81,6 +81,19 @@ class CharacterDataVersion1(BaseModel):
 
                 del self.status["job_class_localization"]
 
+            if "hp_max" in self.status:
+                try:
+                    data_dict["additional_info"]["hp_base_point"] = int(self.status["hp_max"])
+                except ValueError:
+                    pass
+                del self.status["hp_max"]
+            if "sp_max" in self.status:
+                try:
+                    data_dict["additional_info"]["sp_base_point"] = int(self.status["sp_max"])
+                except ValueError:
+                    pass
+                del self.status["sp_max"]
+
             for key in self.status.keys():
                 try:
                     data_dict["status"][key] = int(self.status[key])
@@ -98,7 +111,8 @@ class CharacterDataVersion1(BaseModel):
                     for idx, value in skill_table.items():
                         # 一番最初に合致したスキルとなる(skill tableには同じ名前のスキルがあることも)
                         if "name" in value and value["name"] == local_name:
-                            data_dict["skills"][idx] = skill_lv
+                            data_dict["skills"][idx] = {}
+                            data_dict["skills"][idx]["lv"] = skill_lv
                             remove_localization_list.append(local_name)
                             break
 
@@ -129,10 +143,21 @@ class CharacterDataVersion1(BaseModel):
             if "world_name" in self.additional_info:
                 data_dict["additional_info"]["world_name"] = self.additional_info["world_name"]
 
+            if "hp_base_point" in self.additional_info:
+                try:
+                    data_dict["additional_info"]["hp_base_point"] = int(self.additional_info["hp_base_point"])
+                except ValueError:
+                    pass
+            if "sp_base_point" in self.additional_info:
+                try:
+                    data_dict["additional_info"]["sp_base_point"] = int(self.additional_info["sp_base_point"])
+                except ValueError:
+                    pass
+
         return data_dict
 
-    def to_json(self, ensure_ascii: bool = False, indent: int = 0) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=ensure_ascii, indent=indent)
+    def to_json(self, ensure_ascii: bool = False, sort_keys: bool = False, indent: int = 0) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=ensure_ascii, sort_keys=sort_keys, indent=indent)
 
 @app.get("/")
 async def index():
@@ -185,7 +210,7 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion1, simulato
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://{request.url.hostname}/simulator/v{simulator_version}.html?{data_base64}"
+            "url" : f"https://{request.url.hostname}/simulator/v{simulator_version}.html?{data_base64}#main"
         })
 
 if __name__ == '__main__':
