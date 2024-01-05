@@ -74,10 +74,10 @@ class CharacterDataVersion1(BaseModel):
                 with open(json_tables["job_class"], "r", encoding="utf-8") as fp:
                     job_class_table = json.load(fp)
 
-                for idx, value in job_class_table.items():
-                    if value["display_name"] == self.status["job_class_localization"]:
-                        data_dict["status"]["job_class"] = value["class"]
-                        break
+                    for value in job_class_table:
+                        if value["display_name"] == self.status["job_class_localization"]:
+                            data_dict["status"]["job_class"] = value["class"]
+                            break
 
                 del self.status["job_class_localization"]
 
