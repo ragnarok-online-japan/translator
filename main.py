@@ -11,7 +11,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-import msgpack
 
 app = FastAPI(
     title="Translator",
@@ -21,8 +20,8 @@ app = FastAPI(
 templates = Jinja2Templates(directory="templates")
 
 json_tables = {
-    "job_class": "/var/www/html/simulator/data/job_classes.json",
-    "skill":     "/var/www/html/simulator/data/skill_list.json",
+    "job_class": "/var/www/html_rodb/simulator/data/job_classes.json",
+    "skill":     "/var/www/html_rodb/simulator/data/skill_list.json",
 }
 
 origins: list = [
@@ -75,7 +74,7 @@ class CharacterDataVersion1(BaseModel):
                 with open(json_tables["job_class"], "r", encoding="utf-8") as fp:
                     job_class_table = json.load(fp)
 
-                for idx, value in enumerate(job_class_table):
+                for idx, value in job_class_table.items():
                     if value["display_name"] == self.status["job_class_localization"]:
                         data_dict["status"]["job_class"] = value["class"]
                         break
@@ -196,11 +195,8 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion1, simulato
         # dict => json
         data_json: str = data.to_json(indent=0)
 
-        # json => msgpack
-        data_msgpack: bytes = msgpack.packb(data_json.encode("utf-8"), use_bin_type=True)
-
-        # msgpack => bz2 copressed
-        data_compressed: bytes = bz2.compress(data_msgpack, compresslevel=9)
+        # json => bz2 copressed
+        data_compressed: bytes = bz2.compress(data_json.encode("utf-8"), compresslevel=9)
 
         # bz2 compressed => base64
         data_base64 = binascii.b2a_base64(data_compressed).decode("utf-8")
