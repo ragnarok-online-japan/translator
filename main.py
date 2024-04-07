@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import binascii
 import bz2
 import json
 from typing import Union
+import base65536
 from pydantic import BaseModel
 
 import uvicorn
@@ -190,16 +190,16 @@ async def translator(request: Request, data: CharacterDataVersion1):
 @app.post("/rodb-simulator")
 @app.post("/rodb-simulator/{version}")
 async def rodb_simulator(request: Request, data: CharacterDataVersion1, simulator_version: int = 1):
-    data_base64: str = ""
+    data_base65536: str = ""
     try:
         # dict => json
-        data_json: str = data.to_json(indent=0)
+        data_json: str = data.to_json(sort_keys=True, indent=0)
 
         # json => bz2 copressed
         data_compressed: bytes = bz2.compress(data_json.encode("utf-8"), compresslevel=9)
 
-        # bz2 compressed => base64
-        data_base64 = binascii.b2a_base64(data_compressed).decode("utf-8")
+        # bz2 compressed => base65536
+        data_base65536 = base65536.encode(data_compressed)
 
     except Exception as ex:
         return JSONResponse({
@@ -210,7 +210,7 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion1, simulato
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://{request.url.hostname}/simulator/v{simulator_version}.html?{data_base64}#main"
+            "url" : f"https://{request.url.hostname}/simulator/v{simulator_version}.html?{data_base65536}#main"
         })
 
 if __name__ == '__main__':

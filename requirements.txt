@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 requests
 jinja2
+base65536
