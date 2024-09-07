@@ -78,7 +78,8 @@ class CharacterDataVersion1(BaseModel):
                             data_dict["status"]["ratorio_job_id_num"] = value["ratorio_job_id_num"]
                             break
 
-                del self.status["job_class_localization"]
+                if compact == True:
+                    del self.status["job_class_localization"]
 
             if "hp_max" in self.status:
                 try:
@@ -218,7 +219,7 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
     data_encoded: str = ""
     try:
         # dict => json
-        data_json: str = data.to_json(compact=True, indent=4)
+        data_json: str = data.to_json(indent=4)
 
         # json => copressed
         data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
