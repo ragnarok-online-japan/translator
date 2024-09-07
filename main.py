@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import bz2
-import json
-from typing import Union
-import base65536
 from pydantic import BaseModel
-
+from typing import Union
+import base64
+import json
+import zlib
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -190,16 +189,16 @@ async def translator(request: Request, data: CharacterDataVersion1):
 @app.post("/rodb-simulator")
 @app.post("/rodb-simulator/{version}")
 async def rodb_simulator(request: Request, data: CharacterDataVersion1, version: int = 1):
-    data_base65536: str = ""
+    data_encoded: str = ""
     try:
         # dict => json
         data_json: str = data.to_json(indent=4)
 
-        # json => bz2 copressed
-        data_compressed: bytes = bz2.compress(data_json.encode("utf-8"), compresslevel=9)
+        # json => copressed
+        data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
 
-        # bz2 compressed => base65536
-        data_base65536 = base65536.encode(data_compressed)
+        # zlib compressed => encoded
+        data_encoded = base64.urlsafe_b64encode(data_compressed)
 
     except Exception as ex:
         return JSONResponse({
@@ -210,22 +209,22 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion1, version:
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://{request.url.hostname}/simulator/v{version}.html?{data_base65536}#main"
+            "url" : f"https://{request.url.hostname}/simulator/v{version}.html?{data_encoded}#main"
         })
 
 @app.post("/roratorio-hub")
 @app.post("/roratorio-hub/{version}")
 async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: int = 4):
-    data_base65536: str = ""
+    data_encoded: str = ""
     try:
         # dict => json
         data_json: str = data.to_json(indent=4)
 
-        # json => bz2 copressed
-        data_compressed: bytes = bz2.compress(data_json.encode("utf-8"), compresslevel=9)
+        # json => copressed
+        data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
 
-        # bz2 compressed => base65536
-        data_base65536 = base65536.encode(data_compressed)
+        # zlib compressed => encoded
+        data_encoded = base64.urlsafe_b64encode(data_compressed).decode("utf-8")
 
     except Exception as ex:
         return JSONResponse({
@@ -236,7 +235,7 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#{data_base65536}"
+            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#{data_encoded}"
         })
 
 if __name__ == '__main__':
