@@ -13,13 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Translator",
-    version="0.0.1",
+    version="1.0.0",
     redoc_url=None,
     root_path="/translator")
 templates = Jinja2Templates(directory="templates")
 
 json_tables = {
-    "job_class": "/var/www/html_rodb/simulator/data/job_classes.json",
+    "job_class": "./job_classes.json",
     "skill":     "/var/www/html_rodb/simulator/data/skill_list.json",
 }
 
@@ -48,8 +48,7 @@ class CharacterDataVersion1(BaseModel):
     supports: Union[dict, None] = None
     additional_info: Union[dict, None] = None
 
-
-    def to_dict(self) -> dict:
+    def to_dict(self, compact: bool) -> dict:
         data_dict: dict[str] = {
             "format_version" : self.format_version,
             "overwrite" : self.overwrite,
@@ -76,6 +75,7 @@ class CharacterDataVersion1(BaseModel):
                     for value in job_class_table:
                         if value["display_name"] == self.status["job_class_localization"]:
                             data_dict["status"]["job_class"] = value["class"]
+                            data_dict["status"]["ratorio_job_id_num"] = value["ratorio_job_id_num"]
                             break
 
                 del self.status["job_class_localization"]
@@ -155,8 +155,8 @@ class CharacterDataVersion1(BaseModel):
 
         return data_dict
 
-    def to_json(self, ensure_ascii: bool = False, sort_keys: bool = False, indent: int = 0) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=ensure_ascii, sort_keys=sort_keys, indent=indent)
+    def to_json(self, compact: bool = False, ensure_ascii: bool = False, sort_keys: bool = False, indent: int = 0) -> str:
+        return json.dumps(self.to_dict(compact=compact), ensure_ascii=ensure_ascii, sort_keys=sort_keys, indent=indent)
 
 @app.get("/")
 async def index():
@@ -218,7 +218,7 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
     data_encoded: str = ""
     try:
         # dict => json
-        data_json: str = data.to_json(indent=4)
+        data_json: str = data.to_json(compact=True, indent=4)
 
         # json => copressed
         data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
@@ -235,7 +235,7 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#{data_encoded}"
+            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#rtx1:{data_encoded}"
         })
 
 if __name__ == '__main__':
