@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import pandas as pd
 from pydantic import BaseModel
 from typing import Union
 import base64
@@ -10,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from rapidfuzz.process import extract
 
 app = FastAPI(
     title="Translator",
@@ -20,7 +22,7 @@ templates = Jinja2Templates(directory="templates")
 
 json_tables = {
     "job_class": "./job_classes.json",
-    "skill":     "/var/www/html_rodb/simulator/data/skill_list.json",
+    "skill":     "./skill_list.json",
 }
 
 origins: list = [
@@ -238,6 +240,84 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
             "success": True,
             "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#rtx1:{data_encoded}"
         })
+
+@app.get("/search/skill")
+async def search_skill(request: Request, word: str = "", ratorio_skill_num: int = None):
+    if word == "":
+        return JSONResponse({
+            "success": False,
+            "message": "Please 'word' query."
+        })
+
+    skill_table: dict = None
+    try:
+        with open(json_tables["skill"], "r", encoding="utf-8") as fp:
+            skill_table = json.load(fp)
+    except:
+        pass
+
+    success: bool = False
+    skill_name: str = None
+    skill_data: dict = None
+    for idx, value in skill_table.items():
+        # 一番最初に合致したスキルとなる(skill tableには同じ名前のスキルがあることも)
+        if "name" in value and value["name"] == word:
+            success = True
+            skill_name = idx
+            skill_data = value
+            break
+
+    response: dict = {
+        "success": success,
+        "word": word,
+        "skill_name": skill_name,
+        "data" : skill_data
+    }
+
+    if ratorio_skill_num is not None:
+        response["ratorio_skill_num"] = ratorio_skill_num
+
+    return JSONResponse(response)
+
+@app.get("/approximate_search/skill")
+async def approximate_search_skill(request: Request, word: str = "", ratorio_skill_num: int = None):
+    if word == "":
+        return JSONResponse({
+            "success": False,
+            "message": "Please 'word' query."
+        })
+
+    skill_table: dict = None
+    try:
+        with open(json_tables["skill"], "r", encoding="utf-8") as fp:
+            skill_table = json.load(fp)
+    except:
+        pass
+
+    success: bool = False
+    skill_name: str = None
+    skill_data: dict = None
+
+    choices: dict = {idx: value['name'] for idx, value in skill_table.items() if 'name' in value}
+    # wordと最も近い物を１件だけ抽出
+    result = extract(word, choices, limit = 1)
+
+    if len(result) > 0:
+        success = True
+        skill_name = list(result[0])[2]
+        skill_data = skill_table[skill_name]
+
+    response: dict = {
+        "success": success,
+        "word": word,
+        "skill_name": skill_name,
+        "data" : skill_data
+    }
+
+    if ratorio_skill_num is not None:
+        response["ratorio_skill_num"] = ratorio_skill_num
+
+    return JSONResponse(response)
 
 if __name__ == '__main__':
     uvicorn.run(app=app)
