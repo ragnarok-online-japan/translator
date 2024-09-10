@@ -29,6 +29,7 @@ origins: list = [
     "http://localhost",
     "https://rodb.aws.0nyx.net",
     "https://rowebtool.gungho.jp",
+    "https://roratorio-hub.github.io"
 ]
 
 app.add_middleware(
