@@ -71,6 +71,9 @@ class CharacterDataVersion1(BaseModel):
 
         if self.status is not None:
             if "job_class_localization" in self.status:
+                # (ドラム) を消す
+                self.status["job_class_localization"] = self.status["job_class_localization"].replace("(ドラム)","")
+
                 job_class_table: dict = None
                 with open(json_tables["job_class"], "r", encoding="utf-8") as fp:
                     job_class_table = json.load(fp)
