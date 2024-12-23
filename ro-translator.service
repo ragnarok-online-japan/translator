@@ -4,7 +4,7 @@ Before=nginx.service
 After=network.target
 
 [Service]
-WorkingDirectory=/opt/ro-translator
+WorkingDirectory=/opt/translator
 ExecStart=/home/ec2-user/.local/bin/uvicorn main:app --reload --port 8084
 ExecReload = /bin/kill -s HUP $MAINPID
 ExecStop = /bin/kill -s TERM $MAINPID
