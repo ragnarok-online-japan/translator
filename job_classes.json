@@ -833,7 +833,7 @@
     },
     {
         "class": "inquisitor",
-        "display_name": "インクィジター",
+        "display_name": "インクイジター",
         "parent_directory": "acolyte_series",
         "base_point_max": 130,
         "talent_point_max": 100,
