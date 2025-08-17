@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 from pydantic import BaseModel
-from typing import Union
 import base64
 import json
-import zlib
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from rapidfuzz.process import extract
+import yaml
+import zstandard as zstd
 
 app = FastAPI(
     title="Translator",
@@ -19,17 +19,35 @@ app = FastAPI(
     root_path="/translator")
 templates = Jinja2Templates(directory="templates")
 
-json_tables = {
-    "job_class": "./job_classes.json",
-    "skill":     "./skill_list.json",
+yaml_table = {
+    "job"   : "./data/job.yaml",
+    "skill" : "./data/skill.yaml"
 }
 
 origins: list = [
     "http://localhost",
-    "https://rodb.aws.0nyx.net",
+    "https://ro-database.info",
     "https://rowebtool.gungho.jp",
     "https://roratorio-hub.github.io"
 ]
+
+SKELETON_DICT: dict = {
+    "format_version" : None,
+    "status" : {
+    },
+    "skills": {
+    },
+    "equipments": {
+    },
+    "items": {
+    },
+    "supports": {
+    },
+    "additional_info": {
+    },
+    "battle_info":{
+    }
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,48 +57,32 @@ app.add_middleware(
     allow_headers=["Origin", "Authorization", "Accept"],
 )
 
-class CharacterDataVersion1(BaseModel):
-    format_version: int = 1
-    overwrite: bool = True # True: initして上書き, False: Merge
+class CharacterDataVersion2(BaseModel):
+    format_version: int = 2
 
-    status: Union[dict, None] = None
-    skills: Union[dict, None] = None
-    equipments: Union[dict, None] = None
-    items: Union[dict, None] = None
-    supports: Union[dict, None] = None
-    additional_info: Union[dict, None] = None
+    status: dict = {}
+    skills: dict = {}
+    equipments: dict = {}
+    items: dict = {}
+    supports: dict = {}
+    additional_info: dict  = {}
 
     def to_dict(self, compact: bool) -> dict:
-        data_dict: dict[str] = {
-            "format_version" : self.format_version,
-            "overwrite" : self.overwrite,
-            "status" : {
-            },
-            "skills": {
-            },
-            "equipments": {
-            },
-            "items": {
-            },
-            "supports": {
-            },
-            "additional_info": {
-            }
-        }
+        SKELETON_DICT["format_version"] = self.format_version
 
         if self.status is not None:
             if "job_class_localization" in self.status:
                 # (ドラム) を消す
                 self.status["job_class_localization"] = self.status["job_class_localization"].replace("(ドラム)","")
 
-                job_class_table: dict = None
-                with open(json_tables["job_class"], "r", encoding="utf-8") as fp:
-                    job_class_table = json.load(fp)
+                job_map: dict = {}
+                with open(yaml_table["job"], "r", encoding="utf-8") as fp:
+                    job_map = yaml.safe_load(fp)
 
-                    for value in job_class_table:
-                        if value["display_name"] == self.status["job_class_localization"]:
-                            data_dict["status"]["job_class"] = value["class"]
-                            data_dict["status"]["ratorio_job_id_num"] = value["ratorio_job_id_num"]
+                    for idx, job in job_map.items():
+                        if job["name_ja"] == self.status["job_class_localization"]:
+                            SKELETON_DICT["status"]["job_id"] = idx
+                            SKELETON_DICT["status"]["ratorio_job_id_num"] = job["_mig_id_num"]
                             break
 
                 if compact == True:
@@ -88,36 +90,36 @@ class CharacterDataVersion1(BaseModel):
 
             if "hp_max" in self.status:
                 try:
-                    data_dict["additional_info"]["hp_base_point"] = int(self.status["hp_max"])
+                    SKELETON_DICT["additional_info"]["hp_base_point"] = int(self.status["hp_max"])
                 except ValueError:
                     pass
                 del self.status["hp_max"]
             if "sp_max" in self.status:
                 try:
-                    data_dict["additional_info"]["sp_base_point"] = int(self.status["sp_max"])
+                    SKELETON_DICT["additional_info"]["sp_base_point"] = int(self.status["sp_max"])
                 except ValueError:
                     pass
                 del self.status["sp_max"]
 
             for key in self.status.keys():
                 try:
-                    data_dict["status"][key] = int(self.status[key])
+                    SKELETON_DICT["status"][key] = int(self.status[key])
                 except ValueError:
-                    data_dict["status"][key] = self.status[key]
+                    SKELETON_DICT["status"][key] = self.status[key]
 
         if self.skills is not None:
             if "localization" in self.skills:
-                skill_table: dict = None
-                with open(json_tables["skill"], "r", encoding="utf-8") as fp:
-                    skill_table = json.load(fp)
+                skill_map: dict = {}
+                with open(yaml_table["skill"], "r", encoding="utf-8") as fp:
+                    skill_map = yaml.safe_load(fp)
 
                 remove_localization_list: list[str] = []
                 for local_name, skill_lv in self.skills["localization"].items():
-                    for idx, value in skill_table.items():
+                    for idx, skill in skill_map.items():
                         # 一番最初に合致したスキルとなる(skill tableには同じ名前のスキルがあることも)
-                        if "name" in value and value["name"] == local_name:
-                            data_dict["skills"][idx] = {}
-                            data_dict["skills"][idx]["lv"] = skill_lv
+                        if "name" in skill and skill["name"] == local_name:
+                            SKELETON_DICT["skills"][idx] = {}
+                            SKELETON_DICT["skills"][idx]["lv"] = skill_lv
                             remove_localization_list.append(local_name)
                             break
 
@@ -128,38 +130,38 @@ class CharacterDataVersion1(BaseModel):
                     del self.skills["localization"]
 
             for key in self.skills.keys():
-                data_dict["skills"][key] = self.skills[key]
+                SKELETON_DICT["skills"][key] = self.skills[key]
 
         if self.equipments is not None:
             for key in self.equipments.keys():
-                data_dict["equipments"][key] = self.equipments[key]
+                SKELETON_DICT["equipments"][key] = self.equipments[key]
 
         if self.items is not None:
             for key in self.items.keys():
-                data_dict["items"][key] = self.items[key]
+                SKELETON_DICT["items"][key] = self.items[key]
 
         if self.items is not None:
-            for key in self.items.keys():
-                data_dict["supports"][key] = self.supports[key]
+            for key in self.supports.keys():
+                SKELETON_DICT["supports"][key] = self.supports[key]
 
         if self.additional_info is not None:
             if "character_name" in self.additional_info:
-                data_dict["additional_info"]["character_name"] = self.additional_info["character_name"]
+                SKELETON_DICT["additional_info"]["character_name"] = self.additional_info["character_name"]
             if "world_name" in self.additional_info:
-                data_dict["additional_info"]["world_name"] = self.additional_info["world_name"]
+                SKELETON_DICT["additional_info"]["world_name"] = self.additional_info["world_name"]
 
             if "hp_base_point" in self.additional_info:
                 try:
-                    data_dict["additional_info"]["hp_base_point"] = int(self.additional_info["hp_base_point"])
+                    SKELETON_DICT["additional_info"]["hp_base_point"] = int(self.additional_info["hp_base_point"])
                 except ValueError:
                     pass
             if "sp_base_point" in self.additional_info:
                 try:
-                    data_dict["additional_info"]["sp_base_point"] = int(self.additional_info["sp_base_point"])
+                    SKELETON_DICT["additional_info"]["sp_base_point"] = int(self.additional_info["sp_base_point"])
                 except ValueError:
                     pass
 
-        return data_dict
+        return SKELETON_DICT
 
     def to_json(self, compact: bool = False, ensure_ascii: bool = False, sort_keys: bool = False, indent: int = 0) -> str:
         return json.dumps(self.to_dict(compact=compact), ensure_ascii=ensure_ascii, sort_keys=sort_keys, indent=indent)
@@ -169,10 +171,10 @@ async def index():
     return templates.TemplateResponse("index.html", {"request": {}})
 
 @app.post("/")
-async def translator(request: Request, data: CharacterDataVersion1):
+async def translator(request: Request, data: CharacterDataVersion2):
     success: bool = True
 
-    format_version: int = None
+    format_version: int|None = None
 
     if data.format_version >= 1:
         format_version = data.format_version
@@ -194,17 +196,18 @@ async def translator(request: Request, data: CharacterDataVersion1):
 
 @app.post("/rodb-simulator")
 @app.post("/rodb-simulator/{version}")
-async def rodb_simulator(request: Request, data: CharacterDataVersion1, version: int = 1):
+async def rodb_simulator(request: Request, data: CharacterDataVersion2, version: int = 1):
     data_encoded: str = ""
     try:
         # dict => json
         data_json: str = data.to_json(indent=4)
 
         # json => copressed
-        data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
+        cctx = zstd.ZstdCompressor()
+        data_compressed: bytes = cctx.compress(data_json.encode("utf-8"))
 
-        # zlib compressed => encoded
-        data_encoded = base64.urlsafe_b64encode(data_compressed)
+        # zstd compressed => encoded
+        data_encoded = base64.urlsafe_b64encode(data_compressed).decode("utf-8")
 
     except Exception as ex:
         return JSONResponse({
@@ -220,14 +223,15 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion1, version:
 
 @app.post("/roratorio-hub")
 @app.post("/roratorio-hub/{version}")
-async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: int = 4):
+async def roratorio_hub(request: Request, data: CharacterDataVersion2, version: int = 4):
     data_encoded: str = ""
     try:
         # dict => json
         data_json: str = data.to_json(indent=4)
 
         # json => copressed
-        data_compressed: bytes = zlib.compress(data_json.encode("utf-8"))
+        cctx = zstd.ZstdCompressor()
+        data_compressed: bytes = cctx.compress(data_json.encode("utf-8"))
 
         # zlib compressed => encoded
         data_encoded = base64.urlsafe_b64encode(data_compressed).decode("utf-8")
@@ -241,33 +245,33 @@ async def roratorio_hub(request: Request, data: CharacterDataVersion1, version: 
     else:
         return JSONResponse({
             "success": True,
-            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html#rtx1:{data_encoded}"
+            "url" : f"https://roratorio-hub.github.io/ratorio/ro{version}/m/calcx.html?rtx2:{data_encoded}"
         })
 
 @app.get("/search/skill")
-async def search_skill(request: Request, word: str = "", ratorio_skill_num: int = None):
+async def search_skill(request: Request, word: str = "", ratorio_skill_num: int|None = None):
     if word == "":
         return JSONResponse({
             "success": False,
             "message": "Please 'word' query."
         })
 
-    skill_table: dict = None
+    skill_map: dict = {}
     try:
-        with open(json_tables["skill"], "r", encoding="utf-8") as fp:
-            skill_table = json.load(fp)
+        with open(yaml_table["skill"], "r", encoding="utf-8") as fp:
+            skill_map = yaml.safe_load(fp)
     except:
         pass
 
     success: bool = False
-    skill_name: str = None
-    skill_data: dict = None
-    for idx, value in skill_table.items():
+    skill_name: str|None = None
+    skill_data: dict|None = None
+    for idx, job in skill_map.items():
         # 一番最初に合致したスキルとなる(skill tableには同じ名前のスキルがあることも)
-        if "name" in value and value["name"] == word:
+        if "name" in job and job["name"] == word:
             success = True
             skill_name = idx
-            skill_data = value
+            skill_data = job
             break
 
     response: dict = {
@@ -283,32 +287,32 @@ async def search_skill(request: Request, word: str = "", ratorio_skill_num: int 
     return JSONResponse(response)
 
 @app.get("/approximate_search/skill")
-async def approximate_search_skill(request: Request, word: str = "", ratorio_skill_num: int = None):
+async def approximate_search_skill(request: Request, word: str = "", ratorio_skill_num: int|None = None):
     if word == "":
         return JSONResponse({
             "success": False,
             "message": "Please 'word' query."
         })
 
-    skill_table: dict = None
+    skill_map: dict = {}
     try:
-        with open(json_tables["skill"], "r", encoding="utf-8") as fp:
-            skill_table = json.load(fp)
+        with open(yaml_table["skill"], "r", encoding="utf-8") as fp:
+            skill_map = yaml.safe_load(fp)
     except:
         pass
 
     success: bool = False
-    skill_name: str = None
-    skill_data: dict = None
+    skill_name: str|None = None
+    skill_data: dict|None = None
 
-    choices: dict = {idx: value['name'] for idx, value in skill_table.items() if 'name' in value}
+    choices: dict = {idx: skill['name'] for idx, skill in skill_map.items() if 'name' in skill}
     # wordと最も近い物を１件だけ抽出
     result = extract(word, choices, limit = 1)
 
     if len(result) > 0:
         success = True
-        skill_name = list(result[0])[2]
-        skill_data = skill_table[skill_name]
+        skill_name = list(result[0])[2] # type: ignore
+        skill_data = skill_map[skill_name]
 
     response: dict = {
         "success": success,

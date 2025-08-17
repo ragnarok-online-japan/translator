@@ -2,4 +2,6 @@ fastapi
 jinja2
 rapidfuzz
 requests
+zstandard
 uvicorn[standard]
+PyYAML
