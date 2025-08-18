@@ -163,6 +163,9 @@ class CharacterDataVersion2(BaseModel):
 
         return SKELETON_DICT
 
+    def to_yaml(self, compact: bool = False, allow_unicode: bool = True, sort_keys: bool = False) -> str:
+        return yaml.dump(self.to_dict(compact=compact), allow_unicode=allow_unicode, sort_keys=sort_keys)
+
     def to_json(self, compact: bool = False, ensure_ascii: bool = False, sort_keys: bool = False, indent: int = 0) -> str:
         return json.dumps(self.to_dict(compact=compact), ensure_ascii=ensure_ascii, sort_keys=sort_keys, indent=indent)
 
@@ -183,7 +186,7 @@ async def translator(request: Request, data: CharacterDataVersion2):
             "success": success,
             "format_version": format_version,
             "type": "json",
-            "translated_data": data.to_json(indent=4)
+            "translated_data": data.to_yaml()
         })
 
     else:
@@ -200,11 +203,11 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion2, version:
     data_encoded: str = ""
     try:
         # dict => json
-        data_json: str = data.to_json(indent=4)
+        data_yaml: str = data.to_yaml()
 
         # json => copressed
         cctx = zstd.ZstdCompressor()
-        data_compressed: bytes = cctx.compress(data_json.encode("utf-8"))
+        data_compressed: bytes = cctx.compress(data_yaml.encode("utf-8"))
 
         # zstd compressed => encoded
         data_encoded = base64.urlsafe_b64encode(data_compressed).decode("utf-8")
@@ -226,14 +229,14 @@ async def rodb_simulator(request: Request, data: CharacterDataVersion2, version:
 async def roratorio_hub(request: Request, data: CharacterDataVersion2, version: int = 4):
     data_encoded: str = ""
     try:
-        # dict => json
-        data_json: str = data.to_json(indent=4)
+        # dict => yaml
+        data_yaml: str = data.to_json(indent=4)
 
-        # json => copressed
+        # yaml => copressed
         cctx = zstd.ZstdCompressor()
-        data_compressed: bytes = cctx.compress(data_json.encode("utf-8"))
+        data_compressed: bytes = cctx.compress(data_yaml.encode("utf-8"))
 
-        # zlib compressed => encoded
+        # zstd compressed => encoded
         data_encoded = base64.urlsafe_b64encode(data_compressed).decode("utf-8")
 
     except Exception as ex:
